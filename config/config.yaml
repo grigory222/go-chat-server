@@ -7,7 +7,10 @@ grpc:
 postgres:
   host: "localhost"
   port: 5432
-  user: "your_user"
-  password: "your_password"
-  dbname: "your_db"
+  user: "myuser"
+  password: "mypassword"
+  dbname: "chat_db"
   sslmode: "disable"
+  max_conns: 10
+  min_conns: 2
+  connect_timeout: 5s

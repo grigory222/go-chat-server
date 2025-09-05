@@ -22,12 +22,15 @@ type GRPC struct {
 }
 
 type Postgres struct {
-	Host     string `yaml:"host" env-required:"true"`
-	Port     int    `yaml:"port" env-default:"5432"`
-	User     string `yaml:"user" env-required:"true"`
-	Password string `yaml:"password" env-required:"true"`
-	DBName   string `yaml:"dbname" env-required:"true"`
-	SSLMode  string `yaml:"sslmode" env-default:"disable"`
+	Host           string        `yaml:"host" env-required:"true"`
+	Port           int           `yaml:"port" env-default:"5432"`
+	User           string        `yaml:"user" env-required:"true"`
+	Password       string        `yaml:"password" env-required:"true"`
+	DBName         string        `yaml:"dbname" env-required:"true"`
+	SSLMode        string        `yaml:"sslmode" env-default:"disable"`
+	MaxConns       int32         `yaml:"max_conns" env-default:"10"`
+	MinConns       int32         `yaml:"min_conns" env-default:"2"`
+	ConnectTimeout time.Duration `yaml:"connect_timeout" env-default:"5s"`
 }
 
 func MustLoad() *Config {

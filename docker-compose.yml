@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  # Сервис для базы данных PostgreSQL
+  postgres-db:
+    # Используем официальный образ PostgreSQL. Рекомендуется указывать конкретную версию.
+    image: postgres:16-alpine
+
+    # Имя контейнера для удобства
+    container_name: go-chat-postgres
+
+    # Переменные окружения для инициализации базы данных.
+    # Лучшая практика - вынести их в файл .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+
+    # Проброс портов: порт_на_хосте:порт_в_контейнере
+    # Позволяет вашему Go-приложению подключаться к БД по localhost:5432
+    ports:
+      - "5432:5432"
+
+    # Монтирование томов (volumes)
+    volumes:
+      # Этот том сохраняет данные БД между перезапусками контейнера.
+      - postgres-data:/var/lib/postgresql/data
+
+      # Эта строка монтирует ваш SQL-скрипт в специальную директорию.
+      # Все .sql файлы из этой директории выполняются при первом запуске контейнера.
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+    # Политика перезапуска. Контейнер будет перезапущен, если он остановился.
+    restart: unless-stopped
+
+    # Настройка проверки состояния, чтобы убедиться, что база данных готова к приему соединений
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+# Определяем именованный том для персистентности данных
+volumes:
+  postgres-data:

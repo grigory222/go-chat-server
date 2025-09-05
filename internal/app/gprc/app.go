@@ -2,8 +2,10 @@ package grpcapp
 
 import (
 	"fmt"
+	"github.com/grigory222/go-chat-server/internal/storage"
 	"log/slog"
 	"net"
+	"time"
 
 	"github.com/grigory222/go-chat-server/internal/grpc/authgrpc"
 	"google.golang.org/grpc"
@@ -15,10 +17,12 @@ type App struct {
 	port       int
 }
 
-func New(log *slog.Logger, port int) *App {
+func New(log *slog.Logger, port int, storage storage.Storage, accessTokenTTL, refreshTokenTTL time.Duration) *App {
 	gRPCServer := grpc.NewServer()
 
-	authgrpc.Register(gRPCServer)
+	authgrpc.Register(gRPCServer, log, storage, accessTokenTTL, refreshTokenTTL)
+
+	//TODO: chatgrpc.Register(gRPCServer, log, storage)
 
 	return &App{
 		log:        log,
