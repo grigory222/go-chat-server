@@ -7,6 +7,7 @@ import (
 	"github.com/grigory222/go-chat-server/internal/config"
 	"github.com/grigory222/go-chat-server/internal/storage"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"log/slog"
 )
@@ -51,7 +52,6 @@ func (s *Storage) Close() {
 	}
 }
 
-// SaveUser сохраняет нового пользователя в БД и возвращает его ID.
 func (s *Storage) SaveUser(ctx context.Context, name, email, passHash string) (int64, error) {
 	const op = "storage.postgres.SaveUser"
 
@@ -65,14 +65,21 @@ func (s *Storage) SaveUser(ctx context.Context, name, email, passHash string) (i
 	var id int64
 	err := s.pool.QueryRow(ctx, query, args).Scan(&id)
 	if err != nil {
-		// TODO: Добавить проверку на дубликат email (unique constraint violation)
+		var pgErr *pgconn.PgError
+		// Проверяем, является ли ошибка специфической ошибкой PostgreSQL
+		if errors.As(err, &pgErr) {
+			// Код '23505' в PostgreSQL означает 'unique_violation' (нарушение уникальности)
+			if pgErr.Code == "23505" {
+				return 0, fmt.Errorf("%s: %w", op, storage.ErrUserExists)
+			}
+		}
+		s.log.Error("failed to save user", slog.Any("err", err))
 		return 0, fmt.Errorf("%s: %w", op, err)
 	}
 
 	return id, nil
 }
 
-// UserByEmail находит пользователя по email.
 func (s *Storage) UserByEmail(ctx context.Context, email string) (*storage.User, error) {
 	const op = "storage.postgres.UserByEmail"
 
