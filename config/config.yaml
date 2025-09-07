@@ -1,6 +1,7 @@
 env: "local"
 access_token_ttl: 1h
 refresh_token_ttl: 48h
+jwt_secret: example_secret
 grpc:
   port: 44044
   timeout: 10h

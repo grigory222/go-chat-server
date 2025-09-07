@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"github.com/grigory222/go-chat-server/internal/config"
+	"github.com/grigory222/go-chat-server/internal/services/auth"
 	"github.com/grigory222/go-chat-server/internal/storage"
 	"github.com/grigory222/go-chat-server/internal/storage/postgres"
 	"log/slog"
@@ -16,8 +17,8 @@ type App struct {
 	Storage storage.Storage
 }
 
-func New(log *slog.Logger, grpcPort int, pgCfg config.Postgres, accessTokenTTL, refreshTokenTTL time.Duration) *App {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second) // Устанавливаем таймаут для подключения к БД
+func New(log *slog.Logger, grpcPort int, pgCfg config.Postgres, accessTokenTTL, refreshTokenTTL time.Duration, jwtSecret string) *App {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	pgStorage, err := postgres.New(ctx, pgCfg, log)
@@ -25,7 +26,9 @@ func New(log *slog.Logger, grpcPort int, pgCfg config.Postgres, accessTokenTTL, 
 		panic("failed to init storage: " + err.Error())
 	}
 
-	grpcApp := grpcapp.New(log, grpcPort, pgStorage, accessTokenTTL, refreshTokenTTL)
+	authService := auth.New(log, pgStorage, accessTokenTTL, refreshTokenTTL, jwtSecret)
+
+	grpcApp := grpcapp.New(log, grpcPort, authService)
 
 	return &App{
 		GRPCSrv: grpcApp,

@@ -3,31 +3,30 @@ package authgrpc
 import (
 	"context"
 	"errors"
-	"github.com/grigory222/go-chat-server/internal/storage"
-	"golang.org/x/crypto/bcrypt"
+	chatpb "github.com/grigory222/go-chat-proto/gen/go/proto"
+	"github.com/grigory222/go-chat-server/internal/domain/models"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"log/slog"
-	"time"
-
-	chatpb "github.com/grigory222/go-chat-proto/gen/go/proto"
-	"google.golang.org/grpc"
 )
+
+type AuthService interface {
+	Login(ctx context.Context, email, password string) (accessToken, refreshToken string, user *chatpb.User, err error)
+	Register(ctx context.Context, name, email, password string) (user *chatpb.User, err error)
+	RefreshToken(ctx context.Context, refreshToken string) (newAccessToken string, err error)
+}
 
 type serverAPI struct {
 	chatpb.UnimplementedAuthServiceServer
-	log             *slog.Logger
-	storage         storage.Storage
-	accessTokenTTL  time.Duration
-	refreshTokenTTL time.Duration
+	log  *slog.Logger
+	auth AuthService
 }
 
-func Register(gRPC *grpc.Server, log *slog.Logger, storage storage.Storage, accessTokenTTL, refreshTokenTTL time.Duration) {
+func Register(gRPC *grpc.Server, log *slog.Logger, auth AuthService) {
 	chatpb.RegisterAuthServiceServer(gRPC, &serverAPI{
-		log:             log,
-		storage:         storage,
-		accessTokenTTL:  accessTokenTTL,
-		refreshTokenTTL: refreshTokenTTL,
+		log:  log,
+		auth: auth,
 	})
 }
 
@@ -37,47 +36,28 @@ func (s *serverAPI) Login(ctx context.Context, req *chatpb.LoginRequest) (*chatp
 
 	log.Info("logging in user")
 
-	// 1. Валидация входных данных
 	if req.GetEmail() == "" || req.GetPassword() == "" {
 		return nil, status.Error(codes.InvalidArgument, "email and password are required")
 	}
 
-	// 2. Получаем пользователя из хранилища
-	user, err := s.storage.UserByEmail(ctx, req.GetEmail())
+	accessToken, refreshToken, user, err := s.auth.Login(ctx, req.GetEmail(), req.GetPassword())
 	if err != nil {
-		// Если пользователь не найден
-		if errors.Is(err, storage.ErrUserNotFound) {
-			log.Warn("user not found", slog.Any("err", err))
+		// Сервис может вернуть ошибку, что пользователь не найден.
+		// Мы преобразуем ее в gRPC-статус Unauthenticated.
+		if errors.Is(err, models.ErrUserNotFound) {
+			log.Warn("user not found or invalid credentials")
 			return nil, status.Error(codes.Unauthenticated, "invalid credentials")
 		}
-		// Для всех остальных ошибок
-		log.Error("failed to get user", slog.Any("err", err))
+		log.Error("failed to login user", slog.Any("err", err))
 		return nil, status.Error(codes.Internal, "failed to login")
 	}
 
-	// 3. Сравниваем хеш пароля из БД с паролем из запроса
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.GetPassword())); err != nil {
-		log.Warn("invalid password", slog.Any("err", err))
-		return nil, status.Error(codes.Unauthenticated, "invalid credentials")
-	}
+	log.Info("user logged in successfully", slog.Int64("user_id", user.Id))
 
-	// 4. Генерация токенов доступа (Access) и обновления (Refresh)
-	// TODO: Реализовать генерацию JWT-токенов.
-	// В реальном приложении здесь будет вызов сервиса, который создает
-	// подписанный JWT-токен, содержащий userID, email и время жизни.
-	accessToken := "mock_jwt_access_token_for_user_" + user.Name
-	refreshToken := "mock_jwt_refresh_token_for_user_" + user.Name
-
-	log.Info("user logged in successfully", slog.Int64("user_id", user.ID))
-
-	// 5. Возвращаем ответ с токенами и информацией о пользователе
 	return &chatpb.LoginResponse{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
-		User: &chatpb.User{
-			Id:   user.ID,
-			Name: user.Name,
-		},
+		User:         user,
 	}, nil
 }
 
@@ -91,28 +71,45 @@ func (s *serverAPI) Register(ctx context.Context, req *chatpb.RegisterRequest) (
 		return nil, status.Error(codes.InvalidArgument, "name, email and password are required")
 	}
 
-	passHash, err := bcrypt.GenerateFromPassword([]byte(req.GetPassword()), bcrypt.DefaultCost)
+	user, err := s.auth.Register(ctx, req.GetName(), req.GetEmail(), req.GetPassword())
 	if err != nil {
-		log.Error("failed to generate password hash", slog.Any("err", err))
-		return nil, status.Error(codes.Internal, "failed to register user")
-	}
-
-	userID, err := s.storage.SaveUser(ctx, req.GetName(), req.GetEmail(), string(passHash))
-	if err != nil {
-		if errors.Is(err, storage.ErrUserExists) {
-			log.Warn("user already exists", slog.Any("err", err))
+		if errors.Is(err, models.ErrUserExists) {
+			log.Warn("user already exists")
 			return nil, status.Error(codes.AlreadyExists, "user with this email already exists")
 		}
-		log.Error("failed to save user", slog.Any("err", err))
+		log.Error("failed to register user", slog.Any("err", err))
 		return nil, status.Error(codes.Internal, "failed to register user")
 	}
 
-	log.Info("user registered successfully", slog.Int64("user_id", userID))
+	log.Info("user registered successfully", slog.Int64("user_id", user.Id))
 
 	return &chatpb.RegisterResponse{
-		User: &chatpb.User{
-			Id:   userID,
-			Name: req.GetName(),
-		},
+		User: user,
+	}, nil
+}
+
+func (s *serverAPI) RefreshToken(ctx context.Context, req *chatpb.RefreshTokenRequest) (*chatpb.RefreshTokenResponse, error) {
+	const op = "authgrpc.RefreshToken"
+	log := s.log.With(slog.String("op", op))
+
+	if req.GetRefreshToken() == "" {
+		return nil, status.Error(codes.InvalidArgument, "refresh token is required")
+	}
+
+	accessToken, err := s.auth.RefreshToken(ctx, req.GetRefreshToken())
+	if err != nil {
+		// Сервис возвращает ошибку, если токен невалиден или пользователь не найден
+		if errors.Is(err, models.ErrInvalidCredentials) {
+			log.Warn("invalid refresh token provided")
+			return nil, status.Error(codes.Unauthenticated, "invalid or expired refresh token")
+		}
+		log.Error("failed to refresh token", slog.Any("err", err))
+		return nil, status.Error(codes.Internal, "failed to refresh token")
+	}
+
+	log.Info("token refreshed successfully")
+
+	return &chatpb.RefreshTokenResponse{
+		AccessToken: accessToken,
 	}, nil
 }

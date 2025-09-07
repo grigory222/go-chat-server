@@ -5,6 +5,7 @@ go 1.24.1
 replace github.com/grigory222/go-chat-proto => ../go-chat-proto
 
 require (
+	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/grigory222/go-chat-proto v0.0.0-00010101000000-000000000000
 	github.com/ilyakaznacheev/cleanenv v1.5.0
 	github.com/jackc/pgx/v5 v5.7.5

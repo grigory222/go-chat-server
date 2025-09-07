@@ -2,25 +2,14 @@ package storage
 
 import (
 	"context"
-	"errors"
+	"github.com/grigory222/go-chat-server/internal/domain/models"
 )
-
-var (
-	ErrUserNotFound = errors.New("user not found")
-	ErrUserExists   = errors.New("user already exists")
-)
-
-// User представляет модель пользователя из БД
-type User struct {
-	ID           int64
-	Name         string
-	Email        string
-	PasswordHash string
-}
 
 type Storage interface {
 	SaveUser(ctx context.Context, name, email, passHash string) (int64, error)
-	UserByEmail(ctx context.Context, email string) (*User, error)
+	UserByEmail(ctx context.Context, email string) (*models.User, error)
+	UserByID(ctx context.Context, id int64) (*models.User, error)
+
 	// TODO: Добавить методы для ChatService
 	// CreateChat(ctx context.Context, name string) (int64, error)
 	// ... и так далее

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/grigory222/go-chat-server/internal/config"
-	"github.com/grigory222/go-chat-server/internal/storage"
+	"github.com/grigory222/go-chat-server/internal/domain/models"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -70,7 +70,7 @@ func (s *Storage) SaveUser(ctx context.Context, name, email, passHash string) (i
 		if errors.As(err, &pgErr) {
 			// Код '23505' в PostgreSQL означает 'unique_violation' (нарушение уникальности)
 			if pgErr.Code == "23505" {
-				return 0, fmt.Errorf("%s: %w", op, storage.ErrUserExists)
+				return 0, fmt.Errorf("%s: %w", op, models.ErrUserExists)
 			}
 		}
 		s.log.Error("failed to save user", slog.Any("err", err))
@@ -80,7 +80,7 @@ func (s *Storage) SaveUser(ctx context.Context, name, email, passHash string) (i
 	return id, nil
 }
 
-func (s *Storage) UserByEmail(ctx context.Context, email string) (*storage.User, error) {
+func (s *Storage) UserByEmail(ctx context.Context, email string) (*models.User, error) {
 	const op = "storage.postgres.UserByEmail"
 
 	query := `SELECT id, name, email, password_hash FROM users WHERE email = @email`
@@ -88,11 +88,29 @@ func (s *Storage) UserByEmail(ctx context.Context, email string) (*storage.User,
 		"email": email,
 	}
 
-	var user storage.User
+	var user models.User
 	err := s.pool.QueryRow(ctx, query, args).Scan(&user.ID, &user.Name, &user.Email, &user.PasswordHash)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("%s: %w", op, storage.ErrUserNotFound)
+			return nil, fmt.Errorf("%s: %w", op, models.ErrUserNotFound)
+		}
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return &user, nil
+}
+
+func (s *Storage) UserByID(ctx context.Context, id int64) (*models.User, error) {
+	const op = "storage.postgres.UserByID"
+
+	query := `SELECT id, name, email, password_hash FROM users WHERE id = @id`
+	args := pgx.NamedArgs{"id": id}
+
+	var user models.User
+	err := s.pool.QueryRow(ctx, query, args).Scan(&user.ID, &user.Name, &user.Email, &user.PasswordHash)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("%s: %w", op, models.ErrUserNotFound)
 		}
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}

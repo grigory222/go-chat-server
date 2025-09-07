@@ -12,6 +12,7 @@ type Config struct {
 	Env             string        `yaml:"env" env-default:"local"`
 	AccessTokenTTL  time.Duration `yaml:"access_token_ttl" env-required:"true"`
 	RefreshTokenTTL time.Duration `yaml:"refresh_token_ttl" env-required:"true"`
+	JwtSecret       string        `yaml:"jwt_secret" env-required:"true"`
 	GRPC            `yaml:"grpc"`
 	Postgres        Postgres `yaml:"postgres"`
 }
