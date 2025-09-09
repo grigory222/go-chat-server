@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/grigory222/go-chat-server/internal/config"
 	"github.com/grigory222/go-chat-server/internal/services/auth"
+	"github.com/grigory222/go-chat-server/internal/services/chat"
 	"github.com/grigory222/go-chat-server/internal/storage"
 	"github.com/grigory222/go-chat-server/internal/storage/postgres"
 	"log/slog"
@@ -17,18 +18,19 @@ type App struct {
 	Storage storage.Storage
 }
 
-func New(log *slog.Logger, grpcPort int, pgCfg config.Postgres, accessTokenTTL, refreshTokenTTL time.Duration, jwtSecret string) *App {
+func New(log *slog.Logger, cfg *config.Config) *App {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	pgStorage, err := postgres.New(ctx, pgCfg, log)
+	pgStorage, err := postgres.New(ctx, cfg.Postgres, log)
 	if err != nil {
 		panic("failed to init storage: " + err.Error())
 	}
 
-	authService := auth.New(log, pgStorage, accessTokenTTL, refreshTokenTTL, jwtSecret)
+	authService := auth.New(log, pgStorage, cfg.AccessTokenTTL, cfg.RefreshTokenTTL, cfg.JwtSecret)
+	chatService := chat.New(log, pgStorage)
 
-	grpcApp := grpcapp.New(log, grpcPort, authService)
+	grpcApp := grpcapp.New(log, cfg.GRPC.Port, authService, chatService, cfg.JwtSecret)
 
 	return &App{
 		GRPCSrv: grpcApp,

@@ -22,7 +22,7 @@ func main() {
 
 	log.Info("starting application", slog.String("env", cfg.Env), slog.Any("cfg", cfg))
 
-	application := app.New(log, cfg.GRPC.Port, cfg.Postgres, cfg.AccessTokenTTL, cfg.RefreshTokenTTL, cfg.JwtSecret)
+	application := app.New(log, cfg)
 	go application.GRPCSrv.MustRun()
 
 	stop := make(chan os.Signal, 1)

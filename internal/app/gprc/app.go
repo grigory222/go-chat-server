@@ -3,6 +3,8 @@ package grpcapp
 import (
 	"fmt"
 	"github.com/grigory222/go-chat-server/internal/grpc/authgrpc"
+	"github.com/grigory222/go-chat-server/internal/grpc/chatgrpc"
+	"github.com/grigory222/go-chat-server/internal/grpc/interceptors"
 	"google.golang.org/grpc"
 	"log/slog"
 	"net"
@@ -14,12 +16,14 @@ type App struct {
 	port       int
 }
 
-func New(log *slog.Logger, port int, service authgrpc.AuthService) *App {
-	gRPCServer := grpc.NewServer()
+func New(log *slog.Logger, port int, authService authgrpc.AuthService, chatService chatgrpc.ChatService, jwtSecret string) *App {
 
-	authgrpc.Register(gRPCServer, log, service)
+	authInterceptor := interceptors.NewAuthInterceptor(log, jwtSecret)
 
-	//TODO: chatgrpc.Register(gRPCServer, log, storage)
+	gRPCServer := grpc.NewServer(grpc.UnaryInterceptor(authInterceptor))
+
+	authgrpc.Register(gRPCServer, log, authService)
+	chatgrpc.Register(gRPCServer, log, chatService)
 
 	return &App{
 		log:        log,

@@ -6,4 +6,5 @@ var (
 	ErrUserNotFound       = errors.New("user not found")
 	ErrUserExists         = errors.New("user already exists")
 	ErrInvalidCredentials = errors.New("invalid credentials")
+	ErrChatNotFound       = errors.New("chat not found")
 )

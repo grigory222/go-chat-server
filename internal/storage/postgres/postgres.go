@@ -118,7 +118,81 @@ func (s *Storage) UserByID(ctx context.Context, id int64) (*models.User, error) 
 	return &user, nil
 }
 
-// TODO: Реализовать остальные методы для работы с чатами и сообщениями
-// func (s *Storage) CreateChat(...) (...)
-// func (s *Storage) GetChatHistory(...) (...)
-// func (s *Storage) SaveMessage(...) (...)
+// CreateChat создает новый чат и возвращает его ID.
+func (s *Storage) CreateChat(ctx context.Context, name string) (int64, error) {
+	const op = "storage.postgres.CreateChat"
+
+	query := `INSERT INTO chats (name, type) VALUES (@name, 'public') RETURNING id` // Пока все чаты публичные
+	args := pgx.NamedArgs{"name": name}
+
+	var id int64
+	if err := s.pool.QueryRow(ctx, query, args).Scan(&id); err != nil {
+		return 0, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return id, nil
+}
+
+// AddUserToChat добавляет пользователя в чат.
+func (s *Storage) AddUserToChat(ctx context.Context, chatID, userID int64) error {
+	const op = "storage.postgres.AddUserToChat"
+
+	query := `INSERT INTO chat_users (chat_id, user_id) VALUES (@chatID, @userID) ON CONFLICT DO NOTHING`
+	args := pgx.NamedArgs{"chatID": chatID, "userID": userID}
+
+	if _, err := s.pool.Exec(ctx, query, args); err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	return nil
+}
+
+// SaveMessage сохраняет новое сообщение в БД и возвращает его полную модель.
+func (s *Storage) SaveMessage(ctx context.Context, chatID, userID int64, text string) (*models.Message, error) {
+	const op = "storage.postgres.SaveMessage"
+
+	query := `INSERT INTO messages (chat_id, user_id, text) VALUES (@chatID, @userID, @text) 
+	          RETURNING id, created_at`
+	args := pgx.NamedArgs{"chatID": chatID, "userID": userID, "text": text}
+
+	var msg models.Message
+	msg.ChatID = chatID
+	msg.UserID = userID
+	msg.Text = text
+
+	if err := s.pool.QueryRow(ctx, query, args).Scan(&msg.ID, &msg.CreatedAt); err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return &msg, nil
+}
+
+// GetChatHistory получает историю сообщений из чата с пагинацией.
+func (s *Storage) GetChatHistory(ctx context.Context, chatID int64, limit, offset uint64) ([]*models.Message, error) {
+	const op = "storage.postgres.GetChatHistory"
+
+	query := `SELECT id, chat_id, user_id, text, created_at FROM messages 
+	          WHERE chat_id = @chatID ORDER BY created_at DESC LIMIT @limit OFFSET @offset`
+	args := pgx.NamedArgs{"chatID": chatID, "limit": limit, "offset": offset}
+
+	rows, err := s.pool.Query(ctx, query, args)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	defer rows.Close()
+
+	var messages []*models.Message
+	for rows.Next() {
+		var msg models.Message
+		if err := rows.Scan(&msg.ID, &msg.ChatID, &msg.UserID, &msg.Text, &msg.CreatedAt); err != nil {
+			return nil, fmt.Errorf("%s: %w", op, err)
+		}
+		messages = append(messages, &msg)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return messages, nil
+}
