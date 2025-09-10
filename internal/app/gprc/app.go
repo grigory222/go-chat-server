@@ -18,9 +18,13 @@ type App struct {
 
 func New(log *slog.Logger, port int, authService authgrpc.AuthService, chatService chatgrpc.ChatService, jwtSecret string) *App {
 
-	authInterceptor := interceptors.NewAuthInterceptor(log, jwtSecret)
+	unaryAuthInterceptor := interceptors.NewAuthInterceptor(log, jwtSecret)
+	streamAuthInterceptor := interceptors.NewAuthStreamInterceptor(log, jwtSecret)
 
-	gRPCServer := grpc.NewServer(grpc.UnaryInterceptor(authInterceptor))
+	gRPCServer := grpc.NewServer(
+		grpc.ChainUnaryInterceptor(unaryAuthInterceptor),
+		grpc.ChainStreamInterceptor(streamAuthInterceptor),
+	)
 
 	authgrpc.Register(gRPCServer, log, authService)
 	chatgrpc.Register(gRPCServer, log, chatService)

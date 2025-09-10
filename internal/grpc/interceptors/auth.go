@@ -70,3 +70,63 @@ func NewAuthInterceptor(log *slog.Logger, jwtSecret string) grpc.UnaryServerInte
 		return handler(ctx, req)
 	}
 }
+
+func NewAuthStreamInterceptor(log *slog.Logger, jwtSecret string) grpc.StreamServerInterceptor {
+	return func(
+		srv interface{},
+		ss grpc.ServerStream,
+		info *grpc.StreamServerInfo,
+		handler grpc.StreamHandler,
+	) error {
+		// Для стримов "белый список" не нужен, т.к. у нас только один стрим-метод (`JoinChat`),
+		// и он точно должен быть защищен. Если появятся публичные стримы, их можно добавить сюда.
+		log.Debug("auth stream interceptor", slog.String("method", info.FullMethod))
+
+		// 1. Получаем токен из метаданных. Контекст берется из стрима.
+		md, ok := metadata.FromIncomingContext(ss.Context())
+		if !ok {
+			return status.Error(codes.Unauthenticated, "metadata is not provided")
+		}
+
+		authHeader, ok := md["authorization"]
+		if !ok || len(authHeader) == 0 {
+			return status.Error(codes.Unauthenticated, "authorization token is not provided")
+		}
+
+		header := authHeader[0]
+		if !strings.HasPrefix(header, "Bearer ") {
+			return status.Error(codes.Unauthenticated, "invalid authorization header format")
+		}
+		token := strings.TrimPrefix(header, "Bearer ")
+
+		// 2. Валидируем токен
+		userID, err := auth.GetUserID(token, []byte(jwtSecret))
+		if err != nil {
+			log.Warn("failed to verify stream token", slog.Any("err", err))
+			return status.Error(codes.Unauthenticated, "invalid access token")
+		}
+
+		log.Debug("user authenticated for stream", slog.Int64("user_id", userID))
+
+		// 3. Оборачиваем серверный стрим, чтобы внедрить новый контекст с userID
+		wrappedStream := &wrappedServerStream{
+			ServerStream: ss,
+			ctx:          context.WithValue(ss.Context(), UserIDKey, userID),
+		}
+
+		// 4. Вызываем следующий обработчик с обернутым стримом
+		return handler(srv, wrappedStream)
+	}
+}
+
+// wrappedServerStream - это обертка над grpc.ServerStream,
+// которая позволяет нам подменить его контекст.
+type wrappedServerStream struct {
+	grpc.ServerStream
+	ctx context.Context
+}
+
+// Context возвращает наш новый, обогащенный контекст.
+func (w *wrappedServerStream) Context() context.Context {
+	return w.ctx
+}

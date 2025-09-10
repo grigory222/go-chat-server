@@ -4,6 +4,10 @@ import (
 	"context"
 	"fmt"
 	chatpb "github.com/grigory222/go-chat-proto/gen/go/proto"
+	"github.com/grigory222/go-chat-server/internal/grpc/interceptors"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"io"
 	"log/slog"
 
 	"github.com/grigory222/go-chat-server/internal/storage"
@@ -12,11 +16,11 @@ import (
 type Service struct {
 	log     *slog.Logger
 	storage storage.Storage
-	//TODO: hub     *Hub
+	hub     *Hub
 }
 
-func New(log *slog.Logger, storage storage.Storage) *Service {
-	return &Service{log: log, storage: storage}
+func New(log *slog.Logger, storage storage.Storage, hub *Hub) *Service {
+	return &Service{log: log, storage: storage, hub: hub}
 }
 
 func (s *Service) CreateChat(ctx context.Context, name string, userID int64) (*chatpb.Chat, error) {
@@ -57,67 +61,65 @@ func (s *Service) GetHistory(ctx context.Context, chatID int64, limit, offset ui
 }
 
 func (s *Service) JoinChat(stream chatpb.ChatService_JoinChatServer) error {
-	panic("implement me")
+	const op = "services.chat.JoinChat"
+	log := s.log.With(slog.String("op", op))
 
-	//	const op = "services.chat.JoinChat"
-	//	//log := s.log.With(slog.String("op", op))
-	//	//
-	//	//userID, ok := stream.Context().Value(interceptors.UserIDKey).(int64)
-	//	//if !ok {
-	//	//	return status.Error(codes.Internal, "failed to get user id")
-	//	//}
-	//	//
-	//	//initialReq, err := stream.Recv()
-	//	//if err != nil {
-	//	//	return status.Errorf(codes.InvalidArgument, "failed to receive initial request: %v", err)
-	//	//}
-	//	//chatID := initialReq.GetChatId()
-	//	//
-	//	//log.Info("user connecting", slog.Int64("user_id", userID), slog.Int64("chat_id", chatID))
-	//	//
-	//	//messageCh, doneCh := s.hub.Register(chatID, userID, stream)
-	//	//defer s.hub.Unregister(chatID, userID)
-	//	//
-	//	//// Горутина на отправку сообщений клиенту
-	//	//go func() {
-	//	//	for {
-	//	//		select {
-	//	//		case msg := <-messageCh:
-	//	//			if err := stream.Send(msg); err != nil {
-	//	//				log.Error("failed to send message to client", slog.Any("err", err))
-	//	//			}
-	//	//		case <-doneCh:
-	//	//			return
-	//	//		}
-	//	//	}
-	//	//}()
-	//	//
-	//	//// Цикл на прием сообщений от клиента
-	//	//for {
-	//	//	req, err := stream.Recv()
-	//	//	if err == io.EOF {
-	//	//		log.Info("client disconnected", slog.Int64("user_id", userID))
-	//	//		return nil
-	//	//	}
-	//	//	if err != nil {
-	//	//		log.Error("stream error", slog.Any("err", err))
-	//	//		return status.Errorf(codes.Unknown, "stream error: %v", err)
-	//	//	}
-	//	//
-	//	//	savedMsg, err := s.storage.SaveMessage(stream.Context(), chatID, userID, req.GetText())
-	//	//	if err != nil {
-	//	//		log.Error("failed to save message", slog.Any("err", err))
-	//	//		continue
-	//	//	}
-	//	//
-	//	//	protoMsg := &chatpb.Message{
-	//	//		Id:        savedMsg.ID,
-	//	//		ChatId:    savedMsg.ChatID,
-	//	//		UserId:    savedMsg.UserID,
-	//	//		Text:      savedMsg.Text,
-	//	//		CreatedAt: savedMsg.CreatedAt.Unix(),
-	//	//	}
-	//	//
-	//	//	s.hub.Broadcast(protoMsg, userID)
-	//	//}
+	userID, ok := stream.Context().Value(interceptors.UserIDKey).(int64)
+	if !ok {
+		return status.Error(codes.Internal, "failed to get user id")
+	}
+
+	initialReq, err := stream.Recv()
+	if err != nil {
+		return status.Errorf(codes.InvalidArgument, "failed to receive initial request: %v", err)
+	}
+	chatID := initialReq.GetChatId()
+
+	log.Info("user connecting", slog.Int64("user_id", userID), slog.Int64("chat_id", chatID))
+
+	messageCh, doneCh := s.hub.Register(chatID, userID, stream)
+	defer s.hub.Unregister(chatID, userID)
+
+	// Горутина на отправку сообщений клиенту
+	go func() {
+		for {
+			select {
+			case msg := <-messageCh:
+				if err := stream.Send(msg); err != nil {
+					log.Error("failed to send message to client", slog.Any("err", err))
+				}
+			case <-doneCh:
+				return
+			}
+		}
+	}()
+
+	// Цикл на прием сообщений от клиента
+	for {
+		req, err := stream.Recv()
+		if err == io.EOF {
+			log.Info("client disconnected", slog.Int64("user_id", userID))
+			return nil
+		}
+		if err != nil {
+			log.Error("stream error", slog.Any("err", err))
+			return status.Errorf(codes.Unknown, "stream error: %v", err)
+		}
+
+		savedMsg, err := s.storage.SaveMessage(stream.Context(), chatID, userID, req.GetText())
+		if err != nil {
+			log.Error("failed to save message", slog.Any("err", err))
+			continue
+		}
+
+		protoMsg := &chatpb.Message{
+			Id:        savedMsg.ID,
+			ChatId:    savedMsg.ChatID,
+			UserId:    savedMsg.UserID,
+			Text:      savedMsg.Text,
+			CreatedAt: savedMsg.CreatedAt.Unix(),
+		}
+
+		s.hub.Broadcast(protoMsg, userID)
+	}
 }
