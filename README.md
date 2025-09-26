@@ -1,7 +1,5 @@
 ## Go streaming chat 
 
-gRPC сервис обмена сообщениями: двунаправленный поток, JWT-аутентификация, персистентность в PostgreSQL.
-
 ### Демонстрация
 
 ![Demo](.docs/media/demo.gif)
