@@ -48,7 +48,7 @@ jobs:
           path: go-chat-proto
 
       - name: Patch go.mod for CI
-          run: |
+        run: |
             sed -i '/github.com\/grigory222\/go-chat-proto/d' go.mod
             echo "replace github.com/grigory222/go-chat-proto => ./go-chat-proto" >> go.mod
             grep go-chat-proto go.mod
