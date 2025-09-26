@@ -97,17 +97,30 @@ jobs:
             exit 1
           fi
 
-      - name: Create coverage badge file
+      - name: Debug coverage.txt existence
+        run: |
+          if [ -f coverage.txt ]; then
+            echo "coverage.txt exists. Contents:"
+            cat coverage.txt
+          else
+            echo "Error: coverage.txt does not exist."
+            exit 1
+          fi
+
+      - name: Debug coverage badge generation
         run: |
           mkdir -p .github/badges
-          PCT=$(cat coverage.txt)
-          COLOR=${{ steps.covbadge.outputs.color }}
+          PCT=$(cat coverage.txt || echo "Error reading coverage.txt")
+          echo "Coverage percentage: $PCT"
+          COLOR=red
+          if [ "${PCT%.*}" -ge 80 ]; then COLOR=brightgreen; elif [ "${PCT%.*}" -ge 60 ]; then COLOR=yellow; elif [ "${PCT%.*}" -ge 40 ]; then COLOR=orange; fi
+          echo "Badge color: $COLOR"
           cat > .github/badges/coverage.svg <<EOF
           <svg xmlns="http://www.w3.org/2000/svg" width="120" height="20" role="img" aria-label="coverage: $PCT">
             <linearGradient id="s" x2="0" y2="100%"><stop offset="0" stop-color="#bbb" stop-opacity=".1"/><stop offset="1" stop-opacity=".1"/></linearGradient>
             <rect rx="3" width="120" height="20" fill="#555"/>
-            <rect rx="3" x="65" width="55" height="20" fill="${{ steps.covbadge.outputs.color }}"/>
-            <path fill="${{ steps.covbadge.outputs.color }}" d="M65 0h4v20h-4z"/>
+            <rect rx="3" x="65" width="55" height="20" fill="$COLOR"/>
+            <path fill="$COLOR" d="M65 0h4v20h-4z"/>
             <rect rx="3" width="120" height="20" fill="url(#s)"/>
             <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" text-rendering="geometricPrecision" font-size="11">
               <text aria-hidden="true" x="33" y="15" fill="#010101" fill-opacity=".3">coverage</text>
