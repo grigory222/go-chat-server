@@ -30,7 +30,8 @@ func main() {
 
 	<-stop
 
-	application.GRPCSrv.Stop()
+	log.Info("shutting down application...")
+	application.Stop()
 
 	log.Info("application stopped")
 }

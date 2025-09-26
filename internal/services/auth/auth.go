@@ -4,12 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"time"
+
 	chatpb "github.com/grigory222/go-chat-proto/gen/go/proto"
 	"github.com/grigory222/go-chat-server/internal/domain/models"
 	"github.com/grigory222/go-chat-server/internal/storage"
 	"golang.org/x/crypto/bcrypt"
-	"log/slog"
-	"time"
 )
 
 type Service struct {
@@ -42,11 +43,12 @@ func (s *Service) Login(ctx context.Context, email, password string) (accessToke
 
 	dbUser, err := s.storage.UserByEmail(ctx, email)
 	if err != nil {
-		return "", "", nil, fmt.Errorf("%s: %w", op, err)
+		// Не раскрываем информацию о том, существует ли пользователь
+		return "", "", nil, fmt.Errorf("%s: %w", op, models.ErrInvalidCredentials)
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(dbUser.PasswordHash), []byte(password)); err != nil {
-		return "", "", nil, fmt.Errorf("%s: %w", op, models.ErrUserNotFound)
+		return "", "", nil, fmt.Errorf("%s: %w", op, models.ErrInvalidCredentials)
 	}
 
 	accessToken, refreshToken, err = NewTokens(dbUser, s.accessTokenTTL, s.refreshTokenTTL, s.jwtSecret)

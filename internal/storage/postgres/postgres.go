@@ -4,12 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+
 	"github.com/grigory222/go-chat-server/internal/config"
 	"github.com/grigory222/go-chat-server/internal/domain/models"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"log/slog"
 )
 
 type Storage struct {
@@ -151,6 +152,7 @@ func (s *Storage) AddUserToChat(ctx context.Context, chatID, userID int64) error
 func (s *Storage) SaveMessage(ctx context.Context, chatID, userID int64, text string) (*models.Message, error) {
 	const op = "storage.postgres.SaveMessage"
 
+	// Сначала вставляем сообщение
 	query := `INSERT INTO messages (chat_id, user_id, text) VALUES (@chatID, @userID, @text) 
 	          RETURNING id, created_at`
 	args := pgx.NamedArgs{"chatID": chatID, "userID": userID, "text": text}
@@ -164,6 +166,12 @@ func (s *Storage) SaveMessage(ctx context.Context, chatID, userID int64, text st
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
+	// Затем получаем имя пользователя
+	userQuery := `SELECT name FROM users WHERE id = @userID`
+	if err := s.pool.QueryRow(ctx, userQuery, pgx.NamedArgs{"userID": userID}).Scan(&msg.UserName); err != nil {
+		return nil, fmt.Errorf("%s: failed to get user name: %w", op, err)
+	}
+
 	return &msg, nil
 }
 
@@ -171,8 +179,11 @@ func (s *Storage) SaveMessage(ctx context.Context, chatID, userID int64, text st
 func (s *Storage) GetChatHistory(ctx context.Context, chatID int64, limit, offset uint64) ([]*models.Message, error) {
 	const op = "storage.postgres.GetChatHistory"
 
-	query := `SELECT id, chat_id, user_id, text, created_at FROM messages 
-	          WHERE chat_id = @chatID ORDER BY created_at DESC LIMIT @limit OFFSET @offset`
+	query := `SELECT m.id, m.chat_id, m.user_id, u.name, m.text, m.created_at 
+	          FROM messages m 
+	          JOIN users u ON m.user_id = u.id 
+	          WHERE m.chat_id = @chatID 
+	          ORDER BY m.created_at DESC LIMIT @limit OFFSET @offset`
 	args := pgx.NamedArgs{"chatID": chatID, "limit": limit, "offset": offset}
 
 	rows, err := s.pool.Query(ctx, query, args)
@@ -184,7 +195,7 @@ func (s *Storage) GetChatHistory(ctx context.Context, chatID int64, limit, offse
 	var messages []*models.Message
 	for rows.Next() {
 		var msg models.Message
-		if err := rows.Scan(&msg.ID, &msg.ChatID, &msg.UserID, &msg.Text, &msg.CreatedAt); err != nil {
+		if err := rows.Scan(&msg.ID, &msg.ChatID, &msg.UserID, &msg.UserName, &msg.Text, &msg.CreatedAt); err != nil {
 			return nil, fmt.Errorf("%s: %w", op, err)
 		}
 		messages = append(messages, &msg)
@@ -195,4 +206,23 @@ func (s *Storage) GetChatHistory(ctx context.Context, chatID int64, limit, offse
 	}
 
 	return messages, nil
+}
+
+// IsUserInChat проверяет, состоит ли пользователь в чате.
+func (s *Storage) IsUserInChat(ctx context.Context, userID, chatID int64) (bool, error) {
+	const op = "storage.postgres.IsUserInChat"
+
+	query := `SELECT 1 FROM chat_users WHERE user_id = @userID AND chat_id = @chatID LIMIT 1`
+	args := pgx.NamedArgs{"userID": userID, "chatID": chatID}
+
+	var tmp int
+	err := s.pool.QueryRow(ctx, query, args).Scan(&tmp)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return true, nil
 }

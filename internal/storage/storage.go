@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+
 	"github.com/grigory222/go-chat-server/internal/domain/models"
 )
 
@@ -14,4 +15,7 @@ type Storage interface {
 	AddUserToChat(ctx context.Context, chatID, userID int64) error
 	SaveMessage(ctx context.Context, chatID, userID int64, text string) (*models.Message, error)
 	GetChatHistory(ctx context.Context, chatID int64, limit, offset uint64) ([]*models.Message, error)
+
+	IsUserInChat(ctx context.Context, userID, chatID int64) (bool, error)
+	Close()
 }

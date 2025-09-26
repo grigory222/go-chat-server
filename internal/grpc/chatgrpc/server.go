@@ -82,6 +82,9 @@ func (s *serverAPI) GetHistory(ctx context.Context, req *chatpb.GetHistoryReques
 	messages, err := s.chat.GetHistory(ctx, req.GetChatId(), uint64(limit), uint64(req.GetOffset()))
 	if err != nil {
 		log.Error("failed to get history", slog.Any("err", err))
+		if errors.Is(err, models.ErrAccessDenied) {
+			return nil, status.Error(codes.PermissionDenied, "access denied")
+		}
 		if errors.Is(err, models.ErrChatNotFound) {
 			return nil, status.Error(codes.NotFound, "chat not found")
 		}

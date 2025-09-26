@@ -64,7 +64,8 @@ func newRefreshToken(userID int64, ttl time.Duration, signingKey []byte) (string
 // GetUserID извлекает ID пользователя из токена.
 func GetUserID(tokenString string, signingKey []byte) (int64, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+		// Строго проверяем, что используется именно HS256
+		if token.Method != jwt.SigningMethodHS256 {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 		return signingKey, nil

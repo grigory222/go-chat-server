@@ -3,12 +3,14 @@ package chat
 import (
 	"context"
 	"fmt"
+	"io"
+	"log/slog"
+
 	chatpb "github.com/grigory222/go-chat-proto/gen/go/proto"
+	"github.com/grigory222/go-chat-server/internal/domain/models"
 	"github.com/grigory222/go-chat-server/internal/grpc/interceptors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"io"
-	"log/slog"
 
 	"github.com/grigory222/go-chat-server/internal/storage"
 )
@@ -40,6 +42,24 @@ func (s *Service) CreateChat(ctx context.Context, name string, userID int64) (*c
 
 func (s *Service) GetHistory(ctx context.Context, chatID int64, limit, offset uint64) ([]*chatpb.Message, error) {
 	const op = "services.chat.GetHistory"
+	log := s.log.With(slog.String("op", op), slog.Int64("chat_id", chatID))
+
+	// 0. получаем userID из контекста (interceptor уже положил его туда)
+	userID, ok := ctx.Value(interceptors.UserIDKey).(int64)
+	if !ok {
+		log.Warn("missing user id in context")
+		return nil, models.ErrInvalidCredentials // или другая подходящая доменная ошибка
+	}
+
+	// 1. проверяем членство пользователя в чате
+	inChat, err := s.storage.IsUserInChat(ctx, userID, chatID)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	if !inChat {
+		log.Warn("access denied: user is not member of chat", slog.Int64("user_id", userID))
+		return nil, models.ErrAccessDenied
+	}
 
 	messages, err := s.storage.GetChatHistory(ctx, chatID, limit, offset)
 	if err != nil {
@@ -52,6 +72,7 @@ func (s *Service) GetHistory(ctx context.Context, chatID int64, limit, offset ui
 			Id:        msg.ID,
 			ChatId:    msg.ChatID,
 			UserId:    msg.UserID,
+			UserName:  msg.UserName,
 			Text:      msg.Text,
 			CreatedAt: msg.CreatedAt.Unix(),
 		}
@@ -116,6 +137,7 @@ func (s *Service) JoinChat(stream chatpb.ChatService_JoinChatServer) error {
 			Id:        savedMsg.ID,
 			ChatId:    savedMsg.ChatID,
 			UserId:    savedMsg.UserID,
+			UserName:  savedMsg.UserName,
 			Text:      savedMsg.Text,
 			CreatedAt: savedMsg.CreatedAt.Unix(),
 		}

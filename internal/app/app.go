@@ -2,13 +2,14 @@ package app
 
 import (
 	"context"
+	"log/slog"
+	"time"
+
 	"github.com/grigory222/go-chat-server/internal/config"
 	"github.com/grigory222/go-chat-server/internal/services/auth"
 	"github.com/grigory222/go-chat-server/internal/services/chat"
 	"github.com/grigory222/go-chat-server/internal/storage"
 	"github.com/grigory222/go-chat-server/internal/storage/postgres"
-	"log/slog"
-	"time"
 
 	grpcapp "github.com/grigory222/go-chat-server/internal/app/gprc"
 )
@@ -38,4 +39,9 @@ func New(log *slog.Logger, cfg *config.Config) *App {
 		GRPCSrv: grpcApp,
 		Storage: pgStorage,
 	}
+}
+
+func (a *App) Stop() {
+	a.GRPCSrv.Stop()
+	a.Storage.Close()
 }
