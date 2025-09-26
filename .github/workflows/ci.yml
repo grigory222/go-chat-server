@@ -117,6 +117,11 @@ jobs:
           name: coverage-badge
           path: .github/badges/coverage.svg
 
+      - name: Ensure clean working directory
+        run: |
+          git stash --include-untracked || true
+          git reset --hard HEAD
+
       - name: Publish coverage badge to gh-assets branch
         if: github.ref == 'refs/heads/main'
         run: |
