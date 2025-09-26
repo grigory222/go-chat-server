@@ -26,18 +26,19 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U myuser -d chat_db" --health-interval 10s --health-timeout 5s --health-retries 5
+          --health-cmd "pg_isready -U myuser -d chat_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     env:
-      # Config path for tests (storage tests use real Postgres only if you add them later)
       CONFIG_PATH: ./config/config.yaml
       POSTGRES_USER: myuser
       POSTGRES_PASSWORD: mypassword
       POSTGRES_DB: chat_db
 
     steps:
-      - name: Checkout server repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Checkout proto repo
         uses: actions/checkout@v4
@@ -47,22 +48,16 @@ jobs:
 
       - name: Adjust replace path for CI
         run: |
-          # В локальной разработке proto лежит на уровень выше (../go-chat-proto).
-          # В GitHub Actions нельзя чекаутить в .., поэтому временно перепишем replace на ./go-chat-proto.
-          sed -i 's#github.com/grigory222/go-chat-proto => ../go-chat-proto#github.com/grigory222/go-chat-proto => ./go-chat-proto#' go.mod
-          echo 'Updated replace directive:'
-          grep 'go-chat-proto =>' go.mod
+          sed -i 's#../go-chat-proto#./go-chat-proto#' go.mod
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
 
-      - name: Go mod download
-        run: go mod download
+      - run: go mod download
 
-      - name: Run vet & staticcheck (if available)
+      - name: Vet & staticcheck
         run: |
           go vet ./...
           go install honnef.co/go/tools/cmd/staticcheck@latest
@@ -73,163 +68,43 @@ jobs:
           go test -race -count=1 -coverprofile=coverage.out -covermode=atomic ./...
           go tool cover -func=coverage.out | grep total: | awk '{print $3}' > coverage.txt
 
-      - name: Upload coverage artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage
-          path: |
-            coverage.out
-            coverage.txt
-
       - name: Generate coverage badge
         id: covbadge
         run: |
-          PCT=$(cat coverage.txt | sed 's/%//')
+          mkdir -p .github/badges
+          PCT=$(cat coverage.txt)
           COLOR=red
-          if [ "${PCT%.*}" -ge 80 ]; then COLOR=brightgreen; elif [ "${PCT%.*}" -ge 60 ]; then COLOR=yellow; elif [ "${PCT%.*}" -ge 40 ]; then COLOR=orange; fi
+          if [ "${PCT%.*}" -ge 80 ]; then COLOR=brightgreen
+          elif [ "${PCT%.*}" -ge 60 ]; then COLOR=yellow
+          elif [ "${PCT%.*}" -ge 40 ]; then COLOR=orange
+          fi
           echo "pct=$PCT" >> $GITHUB_OUTPUT
           echo "color=$COLOR" >> $GITHUB_OUTPUT
 
-      - name: Verify coverage.txt exists and is not empty
-        run: |
-          if [ ! -s coverage.txt ]; then
-            echo "Error: coverage.txt is missing or empty. Ensure tests generate this file."
-            exit 1
-          fi
-
-      - name: Debug coverage.txt existence
-        run: |
-          if [ -f coverage.txt ]; then
-            echo "coverage.txt exists. Contents:"
-            cat coverage.txt
-          else
-            echo "Error: coverage.txt does not exist."
-            exit 1
-          fi
-
-      - name: Debug coverage badge generation
-        run: |
-          mkdir -p .github/badges
-          PCT=$(cat coverage.txt || echo "Error reading coverage.txt")
-          echo "Coverage percentage: $PCT"
-          COLOR=red
-          if [ "${PCT%.*}" -ge 80 ]; then COLOR=brightgreen; elif [ "${PCT%.*}" -ge 60 ]; then COLOR=yellow; elif [ "${PCT%.*}" -ge 40 ]; then COLOR=orange; fi
-          echo "Badge color: $COLOR"
           cat > .github/badges/coverage.svg <<EOF
           <svg xmlns="http://www.w3.org/2000/svg" width="120" height="20" role="img" aria-label="coverage: $PCT">
-            <linearGradient id="s" x2="0" y2="100%"><stop offset="0" stop-color="#bbb" stop-opacity=".1"/><stop offset="1" stop-opacity=".1"/></linearGradient>
+            <linearGradient id="s" x2="0" y2="100%">
+              <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
+              <stop offset="1" stop-opacity=".1"/>
+            </linearGradient>
             <rect rx="3" width="120" height="20" fill="#555"/>
             <rect rx="3" x="65" width="55" height="20" fill="$COLOR"/>
             <path fill="$COLOR" d="M65 0h4v20h-4z"/>
             <rect rx="3" width="120" height="20" fill="url(#s)"/>
-            <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" text-rendering="geometricPrecision" font-size="11">
-              <text aria-hidden="true" x="33" y="15" fill="#010101" fill-opacity=".3">coverage</text>
+            <g fill="#fff" text-anchor="middle" font-family="Verdana, Geneva, DejaVu Sans, sans-serif" font-size="11">
               <text x="33" y="14">coverage</text>
-              <text aria-hidden="true" x="91" y="15" fill="#010101" fill-opacity=".3">$PCT</text>
               <text x="91" y="14">$PCT</text>
             </g>
           </svg>
           EOF
 
-      - name: Upload coverage badge artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: coverage-badge
-          path: .github/badges/coverage.svg
-
-      - name: Ensure clean working directory
-        run: |
-          git stash --include-untracked || true
-          git reset --hard HEAD
-
-      - name: Publish coverage badge to gh-assets branch
-        if: github.ref == 'refs/heads/main'
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-          BADGE_TMP=$(mktemp /tmp/coverage-XXXX.svg)
-          cp .github/badges/coverage.svg "$BADGE_TMP"
-          git fetch origin gh-assets || true
-          if git ls-remote --exit-code origin gh-assets &>/dev/null; then
-            git checkout -B gh-assets origin/gh-assets
-          else
-            git checkout --orphan gh-assets
-          fi
-          git reset --hard
-          find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
-          cp "$BADGE_TMP" coverage.svg
-          echo 'coverage.out' > .gitignore
-          echo '.env' >> .gitignore
-          cat > README.md <<'EOF'
-          # Coverage Badge Branch
-
-          Auto-generated coverage.svg updated by CI.
-
-          Raw badge URL:
-          https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/gh-assets/coverage.svg
-          EOF
-          git add coverage.svg .gitignore README.md
-          if git diff --cached --quiet; then
-            echo "No changes; skip commit"
-          else
-            git commit -m "chore: update coverage badge"
-          fi
-          git push origin gh-assets --force
-          git checkout "$CURRENT_BRANCH"
-
-      - name: Verify coverage badge file exists
-        run: |
-          if [ ! -f .github/badges/coverage.svg ]; then
-            echo "Error: Coverage badge file (.github/badges/coverage.svg) does not exist."
-            exit 1
-          fi
-
-      - name: Ensure clean gh-assets branch
-        if: github.ref == 'refs/heads/main'
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-          BADGE_TMP=$(mktemp /tmp/coverage-XXXX.svg)
-          cp .github/badges/coverage.svg "$BADGE_TMP"
-          git fetch origin gh-assets || true
-          if git ls-remote --exit-code origin gh-assets &>/dev/null; then
-            git checkout -B gh-assets origin/gh-assets
-          else
-            git checkout --orphan gh-assets
-          fi
-          git reset --hard
-          find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
-          cp "$BADGE_TMP" coverage.svg
-          echo 'coverage.out' > .gitignore
-          echo '.env' >> .gitignore
-          cat > README.md <<'EOF'
-          # Coverage Badge Branch
-
-          Auto-generated coverage.svg updated by CI.
-
-          Raw badge URL:
-          https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/gh-assets/coverage.svg
-          EOF
-          git add coverage.svg .gitignore README.md
-          if git diff --cached --quiet; then
-            echo "No changes; skip commit"
-          else
-            git commit -m "chore: update coverage badge"
-          fi
-          git push origin gh-assets --force
-          git checkout "$CURRENT_BRANCH"
-
-      - name: Remove FETCH_HEAD from main branch
-        if: github.ref == 'refs/heads/main'
-        run: |
-          if [ -f FETCH_HEAD ]; then
-            echo "Removing FETCH_HEAD file from main branch"
-            rm -f FETCH_HEAD
-          fi
+          name: coverage
+          path: |
+            coverage.out
+            coverage.txt
+            .github/badges/coverage.svg
 
       - name: Comment coverage on PR
         if: github.event_name == 'pull_request'
@@ -238,11 +113,34 @@ jobs:
           message: |
             Coverage: ${{ steps.covbadge.outputs.pct }}%
 
-      - name: Revert replace path (for future steps / clarity)
-        if: always()
+      - name: Publish coverage badge to gh-assets branch
+        if: github.ref == 'refs/heads/main'
         run: |
-          sed -i 's#github.com/grigory222/go-chat-proto => ./go-chat-proto#github.com/grigory222/go-chat-proto => ../go-chat-proto#' go.mod || true
-          grep 'go-chat-proto =>' go.mod || true
+          set -euo pipefail
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
 
-  # Separate job only to expose the coverage badge as a downloadable artifact (no pages deployment).
-  # If you want an always-live badge, consider uploading to GitHub Pages or shields.io endpoint.
+          BADGE_FILE=".github/badges/coverage.svg"
+          git fetch origin gh-assets || true
+          if git ls-remote --exit-code origin gh-assets &>/dev/null; then
+            git checkout -B gh-assets origin/gh-assets
+          else
+            git checkout --orphan gh-assets
+          fi
+
+          git reset --hard
+          find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
+          cp "$BADGE_FILE" coverage.svg
+          echo -e "coverage.out\n.env" > .gitignore
+          echo "# Coverage Badge Branch" > README.md
+          echo "Auto-generated coverage.svg updated by CI." >> README.md
+          echo "Raw badge URL:" >> README.md
+          echo "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/gh-assets/coverage.svg" >> README.md
+
+          git add coverage.svg .gitignore README.md
+          if git diff --cached --quiet; then
+            echo "No changes; skip commit"
+          else
+            git commit -m "chore: update coverage badge"
+            git push origin gh-assets --force
+          fi
