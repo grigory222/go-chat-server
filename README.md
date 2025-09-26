@@ -3,7 +3,7 @@
 <p>
 	<a href="https://github.com/grigory222/go-chat-server/actions/workflows/ci.yml"><img src="https://github.com/grigory222/go-chat-server/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
 	<img src="https://img.shields.io/badge/go-1.24+-00ADD8?logo=go" alt="Go Version" />
-	<a href="https://raw.githubusercontent.com/grigory222/go-chat-server/main/.github/badges/coverage.svg"><img src="https://raw.githubusercontent.com/grigory222/go-chat-server/main/.github/badges/coverage.svg" alt="Coverage" /></a>
+	<a href="https://github.com/grigory222/go-chat-server/actions/workflows/ci.yml"><img src="https://github.com/grigory222/go-chat-server/blob/main/.github/badges/coverage.svg" alt="Coverage"></a>
 </p>
 
 ### Демонстрация
