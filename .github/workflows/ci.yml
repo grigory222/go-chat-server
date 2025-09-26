@@ -7,7 +7,7 @@ on:
     branches: [ main, master ]
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 jobs:
@@ -115,6 +115,26 @@ jobs:
         with:
           name: coverage-badge
           path: .github/badges/coverage.svg
+
+      - name: Publish coverage badge to gh-assets branch
+        if: github.ref == 'refs/heads/main'
+        run: |
+          git config user.name "github-actions"
+            git config user.email "actions@github.com"
+            CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+            git fetch origin gh-assets || true
+            if git show-ref --verify --quiet refs/heads/gh-assets; then
+              git checkout gh-assets
+            else
+              git checkout --orphan gh-assets
+              git reset --hard
+            fi
+            mkdir -p .
+            cp .github/badges/coverage.svg coverage.svg
+            git add coverage.svg
+            git commit -m "chore: update coverage badge" || true
+            git push origin gh-assets
+            git checkout "$CURRENT_BRANCH"
 
       - name: Comment coverage on PR
         if: github.event_name == 'pull_request'
