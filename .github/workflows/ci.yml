@@ -48,11 +48,11 @@ jobs:
           path: go-chat-proto
 
       - name: Patch go.mod for CI
-        run: |
-          # добавляем корректный replace (перекроет локальный ../)
-          echo "replace github.com/grigory222/go-chat-proto => ./go-chat-proto" >> go.mod
-          echo "go.mod after patch:"
-          grep go-chat-proto go.mod
+          run: |
+            sed -i '/github.com\/grigory222\/go-chat-proto/d' go.mod
+            echo "replace github.com/grigory222/go-chat-proto => ./go-chat-proto" >> go.mod
+            grep go-chat-proto go.mod
+
 
       # --- go setup ---
       - uses: actions/setup-go@v5
