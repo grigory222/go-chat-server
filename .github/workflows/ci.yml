@@ -78,22 +78,23 @@ jobs:
           mkdir -p .github/badges
           PCT=$(cat coverage.txt | sed 's/%//')
           COLOR=red
-          if [ "${PCT%.*}" -ge 80 ]; then COLOR=brightgreen
-          elif [ "${PCT%.*}" -ge 60 ]; then COLOR=yellow
-          elif [ "${PCT%.*}" -ge 40 ]; then COLOR=orange
+          if [ "${PCT%.*}" -ge 80 ]; then
+            COLOR=brightgreen
+          elif [ "${PCT%.*}" -ge 60 ]; then
+            COLOR=yellow
+          elif [ "${PCT%.*}" -ge 40 ]; then
+            COLOR=orange
           fi
-          # heredoc без отступов перед <svg
           cat > .github/badges/coverage.svg <<EOF
-      <svg xmlns="http://www.w3.org/2000/svg" width="120" height="20">
-        <rect width="65" height="20" fill="#555"/>
-        <rect x="65" width="55" height="20" fill="$COLOR"/>
-        <text x="32" y="14" fill="#fff" font-family="Verdana" font-size="11">coverage</text>
-        <text x="92" y="14" fill="#fff" font-family="Verdana" font-size="11">$PCT%</text>
-      </svg>
-      EOF
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="20">
+  <rect width="65" height="20" fill="#555"/>
+  <rect x="65" width="55" height="20" fill="$COLOR"/>
+  <text x="32" y="14" fill="#fff" font-family="Verdana" font-size="11">coverage</text>
+  <text x="92" y="14" fill="#fff" font-family="Verdana" font-size="11">$PCT%</text>
+</svg>
+EOF
 
-
-      - name: Commit coverage badge
+      - name: Commit coverage badge to main
         if: github.ref == 'refs/heads/main'
         run: |
           git config user.name "github-actions"
@@ -102,12 +103,13 @@ jobs:
           git diff --cached --quiet || git commit -m "chore: update coverage badge"
           git push origin main || true
 
-      - name: Comment coverage on PR
+      - name: Comment coverage badge on PR
         if: github.event_name == 'pull_request'
         run: |
           PCT=$(cat coverage.txt)
           REPO=${GITHUB_REPOSITORY}
-          echo "![Coverage](https://raw.githubusercontent.com/$REPO/main/.github/badges/coverage.svg) ($PCT%)" > comment.md
+          COMMENT="![Coverage](https://raw.githubusercontent.com/$REPO/main/.github/badges/coverage.svg) ($PCT%)"
+          echo "$COMMENT"
         uses: thollander/actions-comment-pull-request@v2
         with:
           message: ${{ steps.comment.outputs.comment }}
