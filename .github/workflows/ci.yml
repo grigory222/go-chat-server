@@ -25,10 +25,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U myuser -d chat_db" \
-          --health-interval 10s \
-          --health-timeout 5s \
-          --health-retries 5
+          --health-cmd "pg_isready -U myuser -d chat_db" --health-interval 10s --health-timeout 5s --health-retries 5
 
     env:
       # Config path for tests (storage tests use real Postgres only if you add them later)
