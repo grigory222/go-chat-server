@@ -78,15 +78,20 @@ jobs:
           mkdir -p .github/badges
           PCT=$(cat coverage.txt | sed 's/%//')
           COLOR=red
-          if [ "${PCT%.*}" -ge 80 ]; then COLOR=brightgreen; elif [ "${PCT%.*}" -ge 60 ]; then COLOR=yellow; elif [ "${PCT%.*}" -ge 40 ]; then COLOR=orange; fi
+          if [ "${PCT%.*}" -ge 80 ]; then COLOR=brightgreen
+          elif [ "${PCT%.*}" -ge 60 ]; then COLOR=yellow
+          elif [ "${PCT%.*}" -ge 40 ]; then COLOR=orange
+          fi
+          # heredoc без отступов перед <svg
           cat > .github/badges/coverage.svg <<EOF
-<svg xmlns="http://www.w3.org/2000/svg" width="120" height="20">
-  <rect width="65" height="20" fill="#555"/>
-  <rect x="65" width="55" height="20" fill="$COLOR"/>
-  <text x="32" y="14" fill="#fff" font-family="Verdana" font-size="11">coverage</text>
-  <text x="92" y="14" fill="#fff" font-family="Verdana" font-size="11">$PCT%</text>
-</svg>
-EOF
+      <svg xmlns="http://www.w3.org/2000/svg" width="120" height="20">
+        <rect width="65" height="20" fill="#555"/>
+        <rect x="65" width="55" height="20" fill="$COLOR"/>
+        <text x="32" y="14" fill="#fff" font-family="Verdana" font-size="11">coverage</text>
+        <text x="92" y="14" fill="#fff" font-family="Verdana" font-size="11">$PCT%</text>
+      </svg>
+      EOF
+
 
       - name: Commit coverage badge
         if: github.ref == 'refs/heads/main'
