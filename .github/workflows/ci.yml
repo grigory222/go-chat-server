@@ -70,7 +70,7 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          go test -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg=$(go list ./internal/... | grep -vE 'internal/(grpc|services/auth|storage)/') ./...
+          go test -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg=$(go list ./... | grep -v 'go-chat-proto') ./...
           go tool cover -func=coverage.out | grep total: | awk '{print $3}' > coverage.txt
 
       - name: Generate coverage badge
