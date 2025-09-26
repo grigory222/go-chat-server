@@ -84,3 +84,29 @@ func TestGetHistoryHandler(t *testing.T) {
 		t.Fatalf("unexpected: %v %v", err, resp)
 	}
 }
+
+// stubJoinStream minimal implementation for JoinChat handler test
+type stubJoinStream struct {
+	chatpb.ChatService_JoinChatServer
+	ctx context.Context
+}
+
+func (s *stubJoinStream) Context() context.Context               { return s.ctx }
+func (s *stubJoinStream) Recv() (*chatpb.JoinChatRequest, error) { return nil, nil }
+func (s *stubJoinStream) Send(*chatpb.Message) error             { return nil }
+
+func TestJoinChatHandler(t *testing.T) {
+	api := &serverAPI{chat: &fakeChatService{}, log: logger()}
+	// Successful path propagates nil error from service
+	ctx := context.WithValue(context.Background(), interceptors.UserIDKey, int64(10))
+	stream := &stubJoinStream{ctx: ctx}
+	if err := api.JoinChat(stream); err != nil {
+		t.Fatalf("expected success, got %v", err)
+	}
+
+	// Error propagation
+	api.chat.(*fakeChatService).joinErr = errors.New("stream error")
+	if err := api.JoinChat(stream); err == nil {
+		t.Fatalf("expected error to be propagated")
+	}
+}
