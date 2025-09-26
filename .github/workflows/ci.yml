@@ -44,6 +44,14 @@ jobs:
           repository: grigory222/go-chat-proto
           path: go-chat-proto
 
+      - name: Adjust replace path for CI
+        run: |
+          # В локальной разработке proto лежит на уровень выше (../go-chat-proto).
+          # В GitHub Actions нельзя чекаутить в .., поэтому временно перепишем replace на ./go-chat-proto.
+          sed -i 's#github.com/grigory222/go-chat-proto => ../go-chat-proto#github.com/grigory222/go-chat-proto => ./go-chat-proto#' go.mod
+          echo 'Updated replace directive:'
+          grep 'go-chat-proto =>' go.mod
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -114,6 +122,12 @@ jobs:
         with:
           message: |
             Coverage: ${{ steps.covbadge.outputs.pct }}%
+
+      - name: Revert replace path (for future steps / clarity)
+        if: always()
+        run: |
+          sed -i 's#github.com/grigory222/go-chat-proto => ./go-chat-proto#github.com/grigory222/go-chat-proto => ../go-chat-proto#' go.mod || true
+          grep 'go-chat-proto =>' go.mod || true
 
   # Separate job only to expose the coverage badge as a downloadable artifact (no pages deployment).
   # If you want an always-live badge, consider uploading to GitHub Pages or shields.io endpoint.
