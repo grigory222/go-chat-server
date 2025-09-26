@@ -102,7 +102,4 @@ jobs:
           PCT=$(cat coverage.txt)
           REPO=${GITHUB_REPOSITORY}
           COMMENT="![Coverage](https://raw.githubusercontent.com/$REPO/main/.github/badges/coverage.svg) ($PCT%)"
-          echo "$COMMENT"
-        uses: thollander/actions-comment-pull-request@v2
-        with:
-          message: ${{ steps.comment.outputs.comment }}
+          gh pr comment ${{ github.event.pull_request.number }} --body "$COMMENT"
