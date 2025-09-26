@@ -90,6 +90,13 @@ jobs:
           echo "pct=$PCT" >> $GITHUB_OUTPUT
           echo "color=$COLOR" >> $GITHUB_OUTPUT
 
+      - name: Verify coverage.txt exists and is not empty
+        run: |
+          if [ ! -s coverage.txt ]; then
+            echo "Error: coverage.txt is missing or empty. Ensure tests generate this file."
+            exit 1
+          fi
+
       - name: Create coverage badge file
         run: |
           mkdir -p .github/badges
@@ -158,6 +165,13 @@ jobs:
           fi
           git push origin gh-assets --force
           git checkout "$CURRENT_BRANCH"
+
+      - name: Verify coverage badge file exists
+        run: |
+          if [ ! -f .github/badges/coverage.svg ]; then
+            echo "Error: Coverage badge file (.github/badges/coverage.svg) does not exist."
+            exit 1
+          fi
 
       - name: Ensure clean gh-assets branch
         if: github.ref == 'refs/heads/main'
