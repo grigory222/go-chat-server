@@ -13,7 +13,6 @@ permissions:
 
 jobs:
   test:
-    name: Build & Test
     runs-on: ubuntu-latest
 
     services:
@@ -38,8 +37,8 @@ jobs:
       POSTGRES_DB: chat_db
 
     steps:
-      # --- checkout repos ---
-      - uses: actions/checkout@v4
+      - name: Checkout server repo
+        uses: actions/checkout@v4
 
       - name: Checkout proto repo
         uses: actions/checkout@v4
@@ -49,20 +48,20 @@ jobs:
 
       - name: Patch go.mod for CI
         run: |
-            sed -i '/github.com\/grigory222\/go-chat-proto/d' go.mod
-            echo "replace github.com/grigory222/go-chat-proto => ./go-chat-proto" >> go.mod
-            grep go-chat-proto go.mod
+          sed -i '/github.com\/grigory222\/go-chat-proto/d' go.mod
+          echo "replace github.com/grigory222/go-chat-proto => ./go-chat-proto" >> go.mod
+          go get github.com/grigory222/go-chat-proto@latest || true
+          go mod tidy
 
-
-      # --- go setup ---
-      - uses: actions/setup-go@v5
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
 
-      - run: go mod download
+      - name: Download deps
+        run: go mod download
 
-      # --- lint & tests ---
       - name: Vet & staticcheck
         run: |
           go vet ./...
@@ -74,39 +73,23 @@ jobs:
           go test -race -count=1 -coverprofile=coverage.out -covermode=atomic ./...
           go tool cover -func=coverage.out | grep total: | awk '{print $3}' > coverage.txt
 
-      # --- badge ---
       - name: Generate coverage badge
-        id: covbadge
         run: |
           mkdir -p .github/badges
-          PCT=$(cat coverage.txt)
+          PCT=$(cat coverage.txt | sed 's/%//')
           COLOR=red
-          if [ "${PCT%.*}" -ge 80 ]; then COLOR=brightgreen
-          elif [ "${PCT%.*}" -ge 60 ]; then COLOR=yellow
-          elif [ "${PCT%.*}" -ge 40 ]; then COLOR=orange
-          fi
-          echo "pct=$PCT" >> $GITHUB_OUTPUT
-          echo "color=$COLOR" >> $GITHUB_OUTPUT
-
+          if [ "${PCT%.*}" -ge 80 ]; then COLOR=brightgreen; elif [ "${PCT%.*}" -ge 60 ]; then COLOR=yellow; elif [ "${PCT%.*}" -ge 40 ]; then COLOR=orange; fi
           cat > .github/badges/coverage.svg <<EOF
-          <svg xmlns="http://www.w3.org/2000/svg" width="120" height="20" role="img" aria-label="coverage: $PCT">
-            <linearGradient id="s" x2="0" y2="100%">
-              <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
-              <stop offset="1" stop-opacity=".1"/>
-            </linearGradient>
-            <rect rx="3" width="120" height="20" fill="#555"/>
-            <rect rx="3" x="65" width="55" height="20" fill="$COLOR"/>
-            <path fill="$COLOR" d="M65 0h4v20h-4z"/>
-            <rect rx="3" width="120" height="20" fill="url(#s)"/>
-            <g fill="#fff" text-anchor="middle" font-family="Verdana, Geneva, DejaVu Sans, sans-serif" font-size="11">
-              <text x="33" y="14">coverage</text>
-              <text x="91" y="14">$PCT</text>
-            </g>
+          <svg xmlns="http://www.w3.org/2000/svg" width="120" height="20">
+            <rect width="65" height="20" fill="#555"/>
+            <rect x="65" width="55" height="20" fill="$COLOR"/>
+            <text x="32" y="14" fill="#fff" font-family="Verdana" font-size="11">coverage</text>
+            <text x="92" y="14" fill="#fff" font-family="Verdana" font-size="11">$PCT%</text>
           </svg>
           EOF
 
-      # --- artifacts ---
-      - uses: actions/upload-artifact@v4
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
         with:
           name: coverage
           path: |
@@ -114,47 +97,9 @@ jobs:
             coverage.txt
             .github/badges/coverage.svg
 
-      # --- PR comment ---
       - name: Comment coverage on PR
         if: github.event_name == 'pull_request'
         uses: thollander/actions-comment-pull-request@v2
         with:
           message: |
-            Coverage: ${{ steps.covbadge.outputs.pct }}%
-
-      # --- publish badge branch ---
-      - name: Publish coverage badge to gh-assets branch
-        if: github.ref == 'refs/heads/main'
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-
-          BADGE_FILE=".github/badges/coverage.svg"
-          git fetch origin gh-assets || true
-          if git ls-remote --exit-code origin gh-assets &>/dev/null; then
-            git checkout -B gh-assets origin/gh-assets
-          else
-            git checkout --orphan gh-assets
-          fi
-
-          git reset --hard
-          find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
-          cp "$BADGE_FILE" coverage.svg
-          echo -e "coverage.out\n.env" > .gitignore
-          {
-            echo "# Coverage Badge Branch"
-            echo
-            echo "Auto-generated coverage.svg updated by CI."
-            echo
-            echo "Raw badge URL:"
-            echo "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/gh-assets/coverage.svg"
-          } > README.md
-
-          git add coverage.svg .gitignore README.md
-          if git diff --cached --quiet; then
-            echo "No changes; skip commit"
-          else
-            git commit -m "chore: update coverage badge"
-            git push origin gh-assets --force
-          fi
+            Coverage: $(cat coverage.txt)
