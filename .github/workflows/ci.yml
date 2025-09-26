@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_dispatch: {}
   push:
     branches: [ main, master ]
   pull_request:
@@ -119,22 +120,39 @@ jobs:
       - name: Publish coverage badge to gh-assets branch
         if: github.ref == 'refs/heads/main'
         run: |
+          set -euo pipefail
           git config user.name "github-actions"
-            git config user.email "actions@github.com"
-            CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-            git fetch origin gh-assets || true
-            if git show-ref --verify --quiet refs/heads/gh-assets; then
-              git checkout gh-assets
-            else
-              git checkout --orphan gh-assets
-              git reset --hard
-            fi
-            mkdir -p .
-            cp .github/badges/coverage.svg coverage.svg
-            git add coverage.svg
-            git commit -m "chore: update coverage badge" || true
-            git push origin gh-assets
-            git checkout "$CURRENT_BRANCH"
+          git config user.email "actions@github.com"
+          CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+          BADGE_TMP=$(mktemp /tmp/coverage-XXXX.svg)
+          cp .github/badges/coverage.svg "$BADGE_TMP"
+          git fetch origin gh-assets || true
+          if git ls-remote --exit-code origin gh-assets &>/dev/null; then
+            git checkout -B gh-assets origin/gh-assets
+          else
+            git checkout --orphan gh-assets
+          fi
+          git reset --hard
+          find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
+          cp "$BADGE_TMP" coverage.svg
+          echo 'coverage.out' > .gitignore
+          echo '.env' >> .gitignore
+          cat > README.md <<'EOF'
+          # Coverage Badge Branch
+
+          Auto-generated coverage.svg updated by CI.
+
+          Raw badge URL:
+          https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/gh-assets/coverage.svg
+          EOF
+          git add coverage.svg .gitignore README.md
+          if git diff --cached --quiet; then
+            echo "No changes; skip commit"
+          else
+            git commit -m "chore: update coverage badge"
+          fi
+          git push origin gh-assets --force
+          git checkout "$CURRENT_BRANCH"
 
       - name: Comment coverage on PR
         if: github.event_name == 'pull_request'
