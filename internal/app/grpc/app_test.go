@@ -106,11 +106,11 @@ func (s *GRPCAppTestSuite) SetupSuite() {
 		}
 	}()
 
-	conn, err := grpc.DialContext(context.Background(), "bufnet",
-		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
-			return s.lis.Dial()
-		}),
-		grpc.WithTransportCredentials(insecure.NewCredentials()))
+	// Use the modern Dial (grpc.Dial is still allowed; grpc.DialContext is deprecated). Provide a custom context dialer.
+	conn, err := grpc.Dial("bufnet",
+		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) { return s.lis.Dial() }),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
 	require.NoError(s.T(), err)
 	s.client = conn
 }
