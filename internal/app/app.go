@@ -11,7 +11,7 @@ import (
 	"github.com/grigory222/go-chat-server/internal/storage"
 	"github.com/grigory222/go-chat-server/internal/storage/postgres"
 
-	grpcapp "github.com/grigory222/go-chat-server/internal/app/gprc"
+	grpcapp "github.com/grigory222/go-chat-server/internal/app/grpc"
 )
 
 type App struct {

@@ -29,6 +29,17 @@ func New(ctx context.Context, cfg config.Postgres, log *slog.Logger) (*Storage, 
 		return nil, fmt.Errorf("%s: failed to parse config: %w", op, err)
 	}
 
+	// Apply sane defaults if zero values (when config loaded manually in tests without env/yaml defaults)
+	if cfg.MaxConns <= 0 {
+		cfg.MaxConns = 10
+	}
+	if cfg.MinConns < 0 {
+		cfg.MinConns = 0
+	}
+	// Ensure MinConns does not exceed MaxConns
+	if cfg.MinConns > cfg.MaxConns {
+		cfg.MinConns = cfg.MaxConns
+	}
 	poolConfig.MaxConns = cfg.MaxConns
 	poolConfig.MinConns = cfg.MinConns
 	poolConfig.ConnConfig.ConnectTimeout = cfg.ConnectTimeout
