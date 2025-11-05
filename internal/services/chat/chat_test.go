@@ -69,7 +69,7 @@ func testLogger() *slog.Logger {
 
 func TestServiceCreateChat(t *testing.T) {
 	st := &mockChatStorage{createChatID: 10}
-	svc := New(testLogger(), st, NewHub(testLogger()))
+	svc := New(testLogger(), st, NewPublisher(testLogger()))
 	chatObj, err := svc.CreateChat(context.Background(), "General", 123)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -87,7 +87,7 @@ func TestServiceCreateChat(t *testing.T) {
 
 func TestServiceGetHistoryBranches(t *testing.T) {
 	st := &mockChatStorage{}
-	svc := New(testLogger(), st, NewHub(testLogger()))
+	svc := New(testLogger(), st, NewPublisher(testLogger()))
 	ctx := context.Background()
 
 	// Missing user id
@@ -147,8 +147,8 @@ func (f *fakeJoinStream) Send(m *chatpb.Message) error { f.sent = append(f.sent,
 
 func TestServiceJoinChatSuccess(t *testing.T) {
 	st := &mockChatStorage{}
-	hub := NewHub(testLogger())
-	svc := New(testLogger(), st, hub)
+	publisher := NewPublisher(testLogger())
+	svc := New(testLogger(), st, publisher)
 
 	ctx := context.WithValue(context.Background(), interceptors.UserIDKey, int64(7))
 	stream := &fakeJoinStream{ctx: ctx, recvQueue: []*chatpb.JoinChatRequest{
@@ -166,8 +166,8 @@ func TestServiceJoinChatSuccess(t *testing.T) {
 
 func TestServiceJoinChatInitialRecvError(t *testing.T) {
 	st := &mockChatStorage{}
-	hub := NewHub(testLogger())
-	svc := New(testLogger(), st, hub)
+	publisher := NewPublisher(testLogger())
+	svc := New(testLogger(), st, publisher)
 	ctx := context.WithValue(context.Background(), interceptors.UserIDKey, int64(7))
 	// Empty queue => first Recv returns EOF -> should map to InvalidArgument error
 	stream := &fakeJoinStream{ctx: ctx}

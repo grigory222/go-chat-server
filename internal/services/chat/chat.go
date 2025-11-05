@@ -16,13 +16,13 @@ import (
 )
 
 type Service struct {
-	log     *slog.Logger
-	storage storage.Storage
-	hub     *Hub
+	log       *slog.Logger
+	storage   storage.Storage
+	publisher *Publisher
 }
 
-func New(log *slog.Logger, storage storage.Storage, hub *Hub) *Service {
-	return &Service{log: log, storage: storage, hub: hub}
+func New(log *slog.Logger, storage storage.Storage, publisher *Publisher) *Service {
+	return &Service{log: log, storage: storage, publisher: publisher}
 }
 
 func (s *Service) CreateChat(ctx context.Context, name string, userID int64) (*chatpb.Chat, error) {
@@ -44,14 +44,13 @@ func (s *Service) GetHistory(ctx context.Context, chatID int64, limit, offset ui
 	const op = "services.chat.GetHistory"
 	log := s.log.With(slog.String("op", op), slog.Int64("chat_id", chatID))
 
-	// 0. получаем userID из контекста (interceptor уже положил его туда)
 	userID, ok := ctx.Value(interceptors.UserIDKey).(int64)
 	if !ok {
 		log.Warn("missing user id in context")
-		return nil, models.ErrInvalidCredentials // или другая подходящая доменная ошибка
+		return nil, models.ErrInvalidCredentials
 	}
 
-	// 1. проверяем членство пользователя в чате
+	// Проверяем что пользователь состоит в чате
 	inChat, err := s.storage.IsUserInChat(ctx, userID, chatID)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
@@ -98,24 +97,11 @@ func (s *Service) JoinChat(stream chatpb.ChatService_JoinChatServer) error {
 
 	log.Info("user connecting", slog.Int64("user_id", userID), slog.Int64("chat_id", chatID))
 
-	messageCh, doneCh := s.hub.Register(chatID, userID, stream)
-	defer s.hub.Unregister(chatID, userID)
+	subscriber := newChatSubscriber(userID, stream, log)
+	s.publisher.Register(chatID, subscriber)
+	defer s.publisher.Unregister(chatID, userID)
 
-	// Горутина на отправку сообщений клиенту
-	go func() {
-		for {
-			select {
-			case msg := <-messageCh:
-				if err := stream.Send(msg); err != nil {
-					log.Error("failed to send message to client", slog.Any("err", err))
-				}
-			case <-doneCh:
-				return
-			}
-		}
-	}()
-
-	// Цикл на прием сообщений от клиента
+	// Читаем сообщения от клиента
 	for {
 		req, err := stream.Recv()
 		if err == io.EOF {
@@ -142,6 +128,6 @@ func (s *Service) JoinChat(stream chatpb.ChatService_JoinChatServer) error {
 			CreatedAt: savedMsg.CreatedAt.Unix(),
 		}
 
-		s.hub.Broadcast(protoMsg, userID)
+		s.publisher.Broadcast(protoMsg, userID)
 	}
 }

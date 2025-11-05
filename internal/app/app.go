@@ -28,10 +28,10 @@ func New(log *slog.Logger, cfg *config.Config) *App {
 		panic("failed to init storage: " + err.Error())
 	}
 
-	hub := chat.NewHub(log)
+	publisher := chat.NewPublisher(log)
 
 	authService := auth.New(log, pgStorage, cfg.AccessTokenTTL, cfg.RefreshTokenTTL, cfg.JwtSecret)
-	chatService := chat.New(log, pgStorage, hub)
+	chatService := chat.New(log, pgStorage, publisher)
 
 	grpcApp := grpcapp.New(log, cfg.GRPC.Port, authService, chatService, cfg.JwtSecret)
 

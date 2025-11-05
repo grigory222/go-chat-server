@@ -94,9 +94,9 @@ func (s *GRPCAppTestSuite) SetupSuite() {
 	storageMock := new(MockStorage)
 	// Setup mock expectations in tests
 
-	hub := chat.NewHub(log)
+	publisher := chat.NewPublisher(log)
 	authService := auth.New(log, storageMock, time.Hour, time.Hour, "secret")
-	chatService := chat.New(log, storageMock, hub)
+	chatService := chat.New(log, storageMock, publisher)
 
 	s.app = New(log, 0, authService, chatService, "secret")
 
@@ -128,9 +128,9 @@ func (s *GRPCAppTestSuite) TestStartAndStop() {
 	// Test that the server starts and stops gracefully
 	log := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	storageMock := new(MockStorage)
-	hub := chat.NewHub(log)
+	publisher := chat.NewPublisher(log)
 	authService := auth.New(log, storageMock, time.Hour, time.Hour, "secret")
-	chatService := chat.New(log, storageMock, hub)
+	chatService := chat.New(log, storageMock, publisher)
 	app := New(log, 9999, authService, chatService, "secret")
 
 	go func() {
